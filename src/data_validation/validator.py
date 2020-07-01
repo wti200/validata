@@ -55,14 +55,14 @@ class Validator:
                 f"Missing columns from validation definitions: {', '.join(missing)}."
             )
 
-        operations = set(self._checks["operation"].dropna())
+        operations = set(df_checks["operation"].dropna())
         missing = operations - Operators.list()
         if missing:
             raise RuntimeError(
                 f"Unknown operations in validation definitions: {', '.join(missing)}."
             )
 
-        comparisons = set(self._checks["comparison"].dropna())
+        comparisons = set(df_checks["comparison"].dropna())
         missing = comparisons - Comparators.list()
         if missing:
             raise RuntimeError(
