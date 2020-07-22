@@ -3,8 +3,8 @@
 import logging
 import pandas as pd
 
-from .operators import Operators
-from .comparators import Comparators
+from data_validation.operators import Operators
+from data_validation.comparators import Comparators
 
 
 class Validator:
