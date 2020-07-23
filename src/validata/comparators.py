@@ -12,126 +12,96 @@ Comparator classes should always extend the `Comparators` base class and
 be initialized via the `Comparators.get()` method.
 """
 
-
-class Comparators:
-    """Abstract factory class for initializing Comparator objects."""
-
-    @classmethod
-    def get(cls, tag):
-        """
-        Method for getting a Comparator object based on its tag.
-
-        Parameters
-        ==========
-        tag : str
-            String identifying a comparator, for example "==".
-
-        Returns
-        =======
-        Comparator
-            Instance of a comparator subclass
-        """
-
-        tags = {comp.tag: comp for comp in cls.__subclasses__()}
-        if tag not in tags:
-            raise TypeError(f"Undefined comparator: {tag}.")
-
-        return tags[tag]()
-
-    @classmethod
-    def list(cls):
-        """Returns a set of available Comparator tags."""
-
-        return {comp.tag for comp in cls.__subclasses__()}
+from validata.base_classes import Comparator
 
 
-class EqComparator(Comparators):
+class EqComparator(Comparator):
     """Checks for identical values."""
 
-    tag = "=="
+    symbol = "=="
 
     def __call__(self, df, target):
         return df.applymap(lambda x: x == target)
 
 
-class UnEqComparator(Comparators):
+class UnEqComparator(Comparator):
     """Checks for non-identical values."""
 
-    tag = "!="
+    symbol = "!="
 
     def __call__(self, df, target):
         return df.applymap(lambda x: x != target)
 
 
-class GtComparator(Comparators):
+class GtComparator(Comparator):
     """Checks whether the data is greater than the target."""
 
-    tag = ">"
+    symbol = ">"
 
     def __call__(self, df, target):
         return df.applymap(lambda x: x > float(target))
 
 
-class GtEqComparator(Comparators):
+class GtEqComparator(Comparator):
     """Checks whether the data is greater than or equal to the target."""
 
-    tag = ">="
+    symbol = ">="
 
     def __call__(self, df, target):
         return df.applymap(lambda x: x >= float(target))
 
 
-class LtComparator(Comparators):
+class LtComparator(Comparator):
     """Checks whether the data is less than the target."""
 
-    tag = "<"
+    symbol = "<"
 
     def __call__(self, df, target):
         return df.applymap(lambda x: x < float(target))
 
 
-class LtEqComparator(Comparators):
+class LtEqComparator(Comparator):
     """Checks whether the data is less than or equal to the target."""
 
-    tag = "<="
+    symbol = "<="
 
     def __call__(self, df, target):
         return df.applymap(lambda x: x <= float(target))
 
 
-class InComparator(Comparators):
+class InComparator(Comparator):
     """Checks whether the data are present in the target list."""
 
-    tag = "in"
+    symbol = "in"
 
     def __call__(self, df, target):
         target = [t.strip() for t in target.split(",")]
         return df.applymap(lambda x: str(x) in target)
 
 
-class BetweenComparator(Comparators):
+class BetweenComparator(Comparator):
     """Checks whether the data falls in the target range."""
 
-    tag = "between"
+    symbol = "between"
 
     def __call__(self, df, target):
         low, high = (float(t) for t in target.split(":"))
         return df.applymap(lambda x: low <= float(x) <= high)
 
 
-class NullComparator(Comparators):
+class NullComparator(Comparator):
     """Checks whether the data is missing (no target required)."""
 
-    tag = "missing"
+    symbol = "missing"
 
     def __call__(self, df, target=None):
         return df.isna()
 
 
-class NotNullComparator(Comparators):
+class NotNullComparator(Comparator):
     """Checks whether the data is not missing (no target required)."""
 
-    tag = "not missing"
+    symbol = "not missing"
 
     def __call__(self, df, target=None):
         return ~df.isna()

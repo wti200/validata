@@ -20,8 +20,8 @@ class Tokenizer:
     ----------
     expression : str
         Expression to generate tokens from.
-    token_types : dict
-        Mapping between tokens and their string representations.
+    tokens : dict
+        Mapping between tokens and their symbols / string representations.
     bare_words : Optional[str]
         Specify handling of bare words:
         - "capture": capture bare words as tokens (default)
@@ -31,34 +31,33 @@ class Tokenizer:
         Perform case sensitive matching or not (default)
     """
 
+    _pointer = 0
     _tokens = []
 
-    def __init__(self, expression, token_types, bare_words="capture", case_sensitive=False):
+    def __init__(self, expression, tokens, bare_words="capture", case_sensitive=False):
         self._log = logging.getLogger(__name__)
 
         expression = expression.strip()
         if not expression or not isinstance(expression, str):
             raise ValueError("Please provide an expression as string.")
 
-        if not token_types or not isinstance(token_types, dict):
+        if not tokens or not isinstance(tokens, dict):
             raise ValueError("Please provide a dict of token types.")
 
         if bare_words not in ["capture", "drop", "error"]:
             raise ValueError(f"Invalid bare_words option provided: {bare_words}")
 
-        self._expression = expression
-        self._types = token_types
         self._bare_words = bare_words
         self._case_sensitive = case_sensitive
 
-        self._lookup = self._build_lookup()
-        self._tokens = self._tokenize()
+        self._lookup = self._build_lookup(tokens)
+        self._tokens = self._tokenize(expression)
 
-    def _build_lookup(self):
+    def _build_lookup(self, token_types):
         """Build symbol to label lookup dict."""
 
         lookup = {}
-        for label, symbols in self._types.items():
+        for label, symbols in token_types.items():
             if not isinstance(symbols, (set, list, tuple)):
                 symbols = [symbols]
 
@@ -69,17 +68,17 @@ class Tokenizer:
 
         return lookup
 
-    def _tokenize(self):
+    def _tokenize(self, expression):
         """Tokenize the expression."""
 
         types_str = "|".join([re.escape(symbol) for symbol in self._lookup])
         if self._case_sensitive:
-            split_reg = re.compile(r"(" + types_str + r")")
+            split_reg = re.compile(f"({types_str})")
         else:
-            split_reg = re.compile(r"(" + types_str + r")", re.IGNORECASE)
+            split_reg = re.compile(f"({types_str})", re.IGNORECASE)
 
         tokens = []
-        for symbol in split_reg.split(self._expression):
+        for symbol in split_reg.split(expression):
             # Cleanse and handle case
             symbol = symbol.strip()
             if not symbol:
@@ -103,23 +102,31 @@ class Tokenizer:
         """Peeks ahead at the next token."""
 
         if self.has_next():
-            return self._tokens[0]
+            return self._tokens[self._pointer + 1]
         return None
 
     def has_next(self):
         """Checks whether there is a next token."""
 
-        return len(self._tokens) > 0
+        return self._pointer < len(self._tokens)
+
+    def reset(self):
+        """Resets the pointer to the starting token."""
+
+        self._pointer = 0
 
     def __iter__(self):
+        """Start iteration, resets the pointer."""
+
+        self._pointer = 0
         return self
 
     def __next__(self):
-        return self.next()
-
-    def next(self):
         """Returns the next token."""
 
-        while self._tokens:
-            return self._tokens.pop(0)
-        raise StopIteration
+        if not self.has_next():
+            raise StopIteration
+
+        token = self._tokens[self._pointer]
+        self._pointer += 1
+        return token

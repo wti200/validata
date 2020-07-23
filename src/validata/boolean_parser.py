@@ -2,16 +2,16 @@
 
 import logging
 
-from data_validation.tokenizer import Tokenizer
-from data_validation.evaluator import Evaluator
+from validata.tokenizer import Tokenizer
+from validata.evaluator import Evaluator
 
 
 class BooleanParser:
     """Parses nested boolean expressions."""
 
     token_types = {
-        "AND": ["and", "en", "&"],
-        "OR":  ["or", "of", "|"],
+        "AND": [" and ", " & "],
+        "OR": [" or ", " | "],
         "GROUP_OPEN": "(",
         "GROUP_CLOSE": ")",
     }
@@ -20,8 +20,8 @@ class BooleanParser:
         self._log = logging.getLogger(__name__)
         self._tokenizer = Tokenizer(expression, self.token_types)
 
-    def evaluate(self, variables):
-        """Evaluate boolean expression using a dict of variables: values."""
+    def evaluate(self, df):
+        """Evaluate the provided expression against a pandas DataFrame."""
 
         result = None
 
@@ -32,7 +32,7 @@ class BooleanParser:
             # Handle grouping / nesting
             if token.type == "GROUP_OPEN":
                 self._log.debug("Entering nested expression.")
-                result = self.evaluate(variables)
+                result = self.evaluate(df)
 
             elif token.type == "GROUP_CLOSE":
                 self._log.debug("Exiting nested expression.")
@@ -51,12 +51,12 @@ class BooleanParser:
                 if next_token.type == "GROUP_OPEN":
                     self._log.debug("Processing token: %s", next_token.value)
                     self._log.debug("Entering nested right hand side expression.")
-                    right_hand = self.evaluate(variables)
+                    right_hand = self.evaluate(df)
 
                 else:
                     self._log.debug("Processing token: %s", next_token.value)
                     self._log.debug("Evaluating right hand side expression.")
-                    right_hand = Evaluator(next_token.value).evaluate(variables)
+                    right_hand = Evaluator(next_token.value).evaluate(df)
 
                 # Apply and / or operation
                 if token.type == "AND":
@@ -70,6 +70,6 @@ class BooleanParser:
                 if result is not None:
                     raise ValueError("Expected and / or, got expression instead.")
 
-                result = Evaluator(token.value).evaluate(variables)
+                result = Evaluator(token.value).evaluate(df)
 
         return result
