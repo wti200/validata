@@ -3,7 +3,7 @@
 import logging
 import pandas as pd
 
-from validata.boolean_parser import BooleanParser
+from validata.parser import Parser
 
 
 class Validator:
@@ -23,6 +23,7 @@ class Validator:
 
     # Required columns in validation checks
     _required = ["name", "expression"]
+    _results = None
 
     def __init__(self, df_checks):
         self._log = logging.getLogger(__name__)
@@ -71,7 +72,7 @@ class Validator:
         for name, expression in self._checks.to_records(index=False):
             self._log.debug("Performing validation: %s.", name)
 
-            parser = BooleanParser(expression)
+            parser = Parser(expression)
             result = parser.evaluate(df)
 
             results[name] = result
@@ -83,4 +84,13 @@ class Validator:
             )
             self._log.debug("Finished validation: %s.", name)
 
+        self._results = results
         return results
+
+    def get_summary(self):
+        """Get a summary of the last validate run."""
+
+        if self._results is None:
+            raise RuntimeError("No validation has run yet, call validate() first.")
+
+        return (100 * self._results.sum() / len(self._results)).to_frame(name="True %")

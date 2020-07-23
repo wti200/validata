@@ -1,17 +1,18 @@
 """Module containing the BooleanParser class for parsing complex boolean expressions."""
 
 import logging
+import numpy as np
 
 from validata.tokenizer import Tokenizer
 from validata.evaluator import Evaluator
 
 
-class BooleanParser:
+class Parser:
     """Parses nested boolean expressions."""
 
     token_types = {
-        "AND": [" and ", " & "],
-        "OR": [" or ", " | "],
+        "AND": ["and", "&"],
+        "OR": ["or", "|"],
         "GROUP_OPEN": "(",
         "GROUP_CLOSE": ")",
     }
@@ -27,7 +28,7 @@ class BooleanParser:
 
         for token in self._tokenizer:
 
-            self._log.debug("Processing token: %s", token.value)
+            self._log.debug("Processing token: %s [%s]", token.value, token.type)
 
             # Handle grouping / nesting
             if token.type == "GROUP_OPEN":
@@ -49,7 +50,9 @@ class BooleanParser:
                 # Get right hand side, compute results
                 next_token = next(self._tokenizer)
                 if next_token.type == "GROUP_OPEN":
-                    self._log.debug("Processing token: %s", next_token.value)
+                    self._log.debug(
+                        "Processing token: %s [%s]", next_token.value, next_token.type
+                    )
                     self._log.debug("Entering nested right hand side expression.")
                     right_hand = self.evaluate(df)
 
@@ -60,9 +63,11 @@ class BooleanParser:
 
                 # Apply and / or operation
                 if token.type == "AND":
-                    result = result and right_hand
+                    # result = result and right_hand
+                    result = np.all(result.join(right_hand), axis=1).to_frame()
                 else:
-                    result = result or right_hand
+                    # result = result or right_hand
+                    result = np.any(result.join(right_hand), axis=1).to_frame()
 
             else:
                 self._log.debug("Evaluating expression: %s", token.value)

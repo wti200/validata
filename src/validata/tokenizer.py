@@ -71,15 +71,16 @@ class Tokenizer:
     def _tokenize(self, expression):
         """Tokenize the expression."""
 
-        types_str = "|".join([re.escape(symbol) for symbol in self._lookup])
+        types_str = r"\b|\b".join([re.escape(symbol) for symbol in self._lookup])
+        types_str = r"(\b{0}\b)".format(types_str)
         if self._case_sensitive:
-            split_reg = re.compile(f"({types_str})")
+            split_reg = re.compile(types_str)
         else:
-            split_reg = re.compile(f"({types_str})", re.IGNORECASE)
+            split_reg = re.compile(types_str, re.IGNORECASE)
 
         tokens = []
         for symbol in split_reg.split(expression):
-            # Cleanse and handle case
+            # Skip empty tokens
             symbol = symbol.strip()
             if not symbol:
                 continue
@@ -93,6 +94,7 @@ class Tokenizer:
                 elif self._bare_words == "error":
                     raise ValueError(f"Encountered bare word in expression: {symbol}.")
 
+            # Token encountered
             else:
                 tokens.append(Token(self._lookup[lookup], symbol))
 
