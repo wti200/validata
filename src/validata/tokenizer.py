@@ -71,8 +71,8 @@ class Tokenizer:
     def _tokenize(self, expression):
         """Tokenize the expression."""
 
-        types_str = r"\b|\b".join([re.escape(symbol) for symbol in self._lookup])
-        types_str = r"(\b{0}\b)".format(types_str)
+        types_str = r"|".join([re.escape(symbol) for symbol in self._lookup])
+        types_str = r"({0})".format(types_str)
         if self._case_sensitive:
             split_reg = re.compile(types_str)
         else:
@@ -81,8 +81,7 @@ class Tokenizer:
         tokens = []
         for symbol in split_reg.split(expression):
             # Skip empty tokens
-            symbol = symbol.strip()
-            if not symbol:
+            if not symbol.strip():
                 continue
 
             # Bare word encountered
@@ -120,7 +119,6 @@ class Tokenizer:
     def __iter__(self):
         """Start iteration, resets the pointer."""
 
-        self._pointer = 0
         return self
 
     def __next__(self):

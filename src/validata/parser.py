@@ -11,14 +11,18 @@ class Parser:
     """Parses nested boolean expressions."""
 
     token_types = {
-        "AND": ["and", "&"],
-        "OR": ["or", "|"],
+        "AND": [" and ", " & "],
+        "OR": [" or ", " | "],
         "GROUP_OPEN": "(",
         "GROUP_CLOSE": ")",
     }
 
     def __init__(self, expression):
         self._log = logging.getLogger(__name__)
+
+        # Replace new lines for multi-line expressions
+        expression = expression.replace("\n", " ")
+
         self._tokenizer = Tokenizer(expression, self.token_types)
 
     def evaluate(self, df):
@@ -64,10 +68,15 @@ class Parser:
                 # Apply and / or operation
                 if token.type == "AND":
                     # result = result and right_hand
-                    result = np.all(result.join(right_hand), axis=1).to_frame()
+                    result = np.all(
+                        result.join(right_hand, rsuffix="_rh"), axis=1
+                    ).to_frame()
+
                 else:
                     # result = result or right_hand
-                    result = np.any(result.join(right_hand), axis=1).to_frame()
+                    result = np.any(
+                        result.join(right_hand, rsuffix="_rh"), axis=1
+                    ).to_frame()
 
             else:
                 self._log.debug("Evaluating expression: %s", token.value)
