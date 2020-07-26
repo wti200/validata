@@ -15,13 +15,25 @@ be initialized via the `Comparators.get()` method.
 from validata.base_classes import Comparator
 
 
+def _cast(target, value):
+    """Try cast target to the same data type as value."""
+
+    if isinstance(value, int):
+        return int(target)
+
+    if isinstance(value, float):
+        return float(target)
+
+    return target
+
+
 class EqComparator(Comparator):
     """Checks for identical values."""
 
     symbol = "=="
 
     def __call__(self, df, target):
-        return df.applymap(lambda x: x == target)
+        return df.applymap(lambda x: x == _cast(target, x))
 
 
 class UnEqComparator(Comparator):
@@ -30,7 +42,7 @@ class UnEqComparator(Comparator):
     symbol = "!="
 
     def __call__(self, df, target):
-        return df.applymap(lambda x: x != target)
+        return df.applymap(lambda x: x != _cast(target, x))
 
 
 class GtComparator(Comparator):
