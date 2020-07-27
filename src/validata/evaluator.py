@@ -65,7 +65,10 @@ class Evaluator:
 
         # Compile into a single expression pattern
         pattern = (
-            r"(?P<op>{op})?\b\s*(?P<cols>{col})\s+(?P<comp>{comp})\s*(?P<value>.*)"
+            r"(?:(?P<op>^{op})\s+)?"  # Optional Operator + space
+            + r"(?P<cols>{col})\s+"  # Required column pattern + space
+            + r"(?P<comp>{comp})"  # Required Comparator
+            + r"(?:(?:\s+(?P<value>.*))|$)"  # Optional space + value or end
         )
         pattern = re.compile(
             pattern.format(op=op_expr, col=col_expr, comp=comp_expr), re.IGNORECASE
@@ -80,7 +83,7 @@ class Evaluator:
         op = op.strip().lower() if op else None
         cols = match.group("cols")
         comp = match.group("comp").lower()
-        value = match.group("value").strip()
+        value = match.group("value")
 
         return op, cols, comp, value
 

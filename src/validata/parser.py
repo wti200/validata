@@ -17,13 +17,13 @@ class Parser:
         "GROUP_CLOSE": ")",
     }
 
-    def __init__(self, expression):
+    def __init__(self, expression, validation_id="validation_result"):
         self._log = logging.getLogger(__name__)
 
         # Replace new lines for multi-line expressions
         expression = expression.replace("\n", " ")
-
         self._tokenizer = Tokenizer(expression, self.token_types)
+        self._id = validation_id
 
     def evaluate(self, df):
         """Evaluate the provided expression against a pandas DataFrame."""
@@ -86,4 +86,5 @@ class Parser:
 
                 result = Evaluator(token.value).evaluate(df)
 
+        result.columns = [self._id]
         return result
