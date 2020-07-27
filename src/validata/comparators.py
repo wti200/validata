@@ -11,6 +11,7 @@ return a DataFrame of identical shape containing only boolean values.
 Comparator classes should always extend the `Comparators` base class and
 be initialized via the `Comparators.get()` method.
 """
+import re
 
 from validata.base_classes import Comparator
 
@@ -117,3 +118,56 @@ class NotNullComparator(Comparator):
 
     def __call__(self, df, target=None):
         return ~df.isna()
+
+
+class RankComparator(Comparator):
+    """Ranks the records and indicates whether a record falls above or below a certain rank."""
+
+    symbol = "ranks in"
+
+    def __call__(self, df, target):
+        match = re.match(
+            r"(?P<from>top|bottom)\s+(?P<rank>[0-9]+)\s*(?P<pct>%)?", target
+        )
+        if not match:
+            raise ValueError(
+                f"RankComparator: Invalid target '{target}', use <top|bottom> <rank> (%)."
+            )
+
+        ascending = match.group("from") == "bottom"
+        pct = match.group("pct") is not None
+        rank = int(match.group("rank"))
+        if pct:
+            if not 0 < rank < 100:
+                raise ValueError(
+                    "RankComparator: Percentile rank must be between 0 - 100, got {rank} instead."
+                )
+            rank = rank / 100
+
+        ranks = df.rank(ascending=ascending, pct=pct)
+        return ranks <= rank
+
+
+class OutlierComparator(Comparator):
+    """Checks whether a record has an extreme value given a detection method."""
+
+    symbol = "outlier by"
+
+    @staticmethod
+    def _outlier_iqr(series, whisker_low=1.5, whisker_high=1.5):
+        """Marks outliers using the Inter-Quartile Range method."""
+
+        # Calculate Q1, Q2 and IQR
+        qlow = series.quantile(0.25)
+        qhigh = series.quantile(0.75)
+        iqr = qhigh - qlow
+
+        # Compute filter with respect to IQR including optional whiskers
+        lim_low = -float("inf") if whisker_low is None else qlow - whisker_low * iqr
+        lim_high = float("inf") if whisker_high is None else qhigh + whisker_high * iqr
+
+        return (series <= lim_low) | (series >= lim_high)
+
+    def __call__(self, df, target="1.5 IQR"):
+        """TODO: use target to determine method + range."""
+        return df.apply(self._outlier_iqr, axis=0)
