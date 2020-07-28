@@ -11,7 +11,7 @@ TARGETS = {
     "in": "1, 2, 3, 4",
     "between": "0:100",
     "ranks in": "top 20%",
-    "outlier by": "1.5 IQR",
+    "is outlier": "1.5 IQR",
 }
 
 

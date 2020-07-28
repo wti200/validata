@@ -162,12 +162,38 @@ class OutlierComparator(Comparator):
         qhigh = series.quantile(0.75)
         iqr = qhigh - qlow
 
-        # Compute filter with respect to IQR including optional whiskers
+        # Compute filter using IQR with optional whiskers
         lim_low = -float("inf") if whisker_low is None else qlow - whisker_low * iqr
         lim_high = float("inf") if whisker_high is None else qhigh + whisker_high * iqr
 
         return (series <= lim_low) | (series >= lim_high)
 
+    @staticmethod
+    def _outlier_sd(series, whisker_low=2, whisker_high=2):
+        """Marks outliers using mean and SD."""
+
+        mean = series.mean()
+        std = series.std()
+
+        # Compute filter using mean and SD with optional whiskers
+        lim_low = -float("inf") if whisker_low is None else mean - whisker_low * std
+        lim_high = float("inf") if whisker_high is None else mean + whisker_high * std
+
+        return (series <= lim_low) | (series >= lim_high)
+
+    @staticmethod
+    def _outlier_mad(series, whisker_low=2, whisker_high=2):
+        """Marks outliers using Median Absolute Deviation."""
+
+        median = series.median()
+
+        # Compute filter using MAD and optional whiskers
+        lim_low = -float("inf") if whisker_low is None else median - whisker_low * median
+        lim_high = float("inf") if whisker_high is None else median + whisker_high * median
+
+        return (series <= lim_low) | (series >= lim_high)
+
     def __call__(self, df, target="1.5 IQR"):
         """TODO: use target to determine method + range."""
+
         return df.apply(self._outlier_iqr, axis=0)
