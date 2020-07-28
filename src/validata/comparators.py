@@ -17,13 +17,22 @@ from validata.base_classes import Comparator
 
 
 def _cast(target, value):
-    """Try cast target to the same data type as value."""
+    """
+    Try cast target to the same data type as value.
+
+    TODO:
+    - Bit sloppy, needs improvement (datetimes, error handling, etc)
+    - Move to Comparator base class?
+    """
 
     if isinstance(value, int):
         return int(target)
 
     if isinstance(value, float):
         return float(target)
+
+    if isinstance(value, bool):
+        return bool(target)
 
     return target
 
@@ -149,9 +158,18 @@ class RankComparator(Comparator):
 
 
 class OutlierComparator(Comparator):
-    """Checks whether a record has an extreme value given a detection method."""
+    """
+    Checks whether a record contains an outlier or extreme value given
+    a provided detection method. Available methods are:
 
-    symbol = "outlier by"
+    - IQR: Uses Inter-Quartile Range (IQR) + whiskers (Tukey's method)
+    - SD:  Uses mean + standard deviation (SD)
+    - MAD: Uses Mean Absolute Deviation (MADe)
+
+    See also: http://d-scholarship.pitt.edu/7948/1/Seo.pdf
+    """
+
+    symbol = "is outlier by"
 
     @staticmethod
     def _outlier_iqr(series, whisker_low=1.5, whisker_high=1.5):
@@ -186,14 +204,37 @@ class OutlierComparator(Comparator):
         """Marks outliers using Median Absolute Deviation."""
 
         median = series.median()
+        made = 1.483 * (series - median).abs().median()
 
         # Compute filter using MAD and optional whiskers
-        lim_low = -float("inf") if whisker_low is None else median - whisker_low * median
-        lim_high = float("inf") if whisker_high is None else median + whisker_high * median
+        lim_low = -float("inf") if whisker_low is None else median - whisker_low * made
+        lim_high = (
+            float("inf") if whisker_high is None else median + whisker_high * made
+        )
 
         return (series <= lim_low) | (series >= lim_high)
 
     def __call__(self, df, target="1.5 IQR"):
-        """TODO: use target to determine method + range."""
+        match = re.match(
+            r"(?P<side>\+|\-)?\s*(?P<whiskers>[0-9\.]+)\s+(?P<method>IQR|SD|MAD)",
+            target,
+            re.IGNORECASE,
+        )
+        if not match:
+            raise ValueError(
+                f"OutlierComparator: Invalid target '{target}', use (+|-)<whisker> <IQR|SD|MAD>."
+            )
 
-        return df.apply(self._outlier_iqr, axis=0)
+        # Set whiskers
+        whisker_low = whisker_high = float(match.group("whiskers"))
+        if match.group("side") == "+":
+            whisker_low = None
+        elif match.group("side") == "-":
+            whisker_high = None
+
+        return df.apply(
+            self._outlier_iqr,
+            axis=0,
+            whisker_low=whisker_low,
+            whisker_high=whisker_high,
+        )

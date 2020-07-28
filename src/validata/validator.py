@@ -12,10 +12,10 @@ class Validator:
     runs them against a dataset.
 
     Parameters
-    ==========
+    ----------
     df_checks : pandas.DataFrame
-        DataFrame containing validation check definitions. Each check should
-        provide the following fields:
+        DataFrame containing validation definitions. Each validation should
+        provide the following information:
 
         - name:         Name of the validation check.
         - expression:   Boolean expression for the validation check.
@@ -37,7 +37,7 @@ class Validator:
         Checks whether validations are correctly specified.
 
         Parameters
-        ==========
+        ----------
         df_checks : pandas.DataFrame
             DataFrame containing validation check definitions.
         """
@@ -57,12 +57,12 @@ class Validator:
         Validator class.
 
         Parameters
-        ==========
+        ----------
         df : pandas.DataFrame
             DataFrame containing the data to be validated.
 
         Returns
-        =======
+        -------
         pandas.DataFrame
             DataFrame with one column for each validation check.
         """
@@ -87,10 +87,33 @@ class Validator:
         self._results = results
         return results
 
-    def get_summary(self):
-        """Get a summary of the last validate run."""
+    def get_summary(self, per="validation", percentage=True):
+        """
+        Get a summary of the last validation run.
+
+        Parameters
+        ----------
+        per : Optional[str]
+            String indicating whether to summarize per validation (default)
+            or per case.
+        pecentage : Optional[bool]
+            Report percentages (True, default) or counts (False).
+
+        Returns
+        -------
+        pandas.DataFrame
+            Data frame with summary statistics per validation or case.
+        """
 
         if self._results is None:
             raise RuntimeError("No validation has run yet, call validate() first.")
 
-        return (100 * self._results.sum() / len(self._results)).to_frame(name="True %")
+        axis = 1 if per == "case" else 0
+        summary = self._results.sum(axis=axis)
+
+        name = "positive"
+        if percentage:
+            summary = 100 * summary / self._results.shape[axis]
+            name = "percentage_positive"
+
+        return summary.to_frame(name)

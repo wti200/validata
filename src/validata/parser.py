@@ -1,4 +1,4 @@
-"""Module containing the BooleanParser class for parsing complex boolean expressions."""
+"""Module containing the Parser class for complex boolean expressions."""
 
 import logging
 import numpy as np
@@ -8,8 +8,21 @@ from validata.evaluator import Evaluator
 
 
 class Parser:
-    """Parses nested boolean expressions."""
+    """
+    Parses for complex, nested boolean expressions.
 
+    Parameters
+    ----------
+    expression : str
+        Logical expression as string, some examples:
+        - column_1 >= 30000
+        - column_1 >= 2 and (column_2 missing or column_2 missing)
+        - column_1 == 1 and any dummy_* == 1
+    name : Optional[str]
+        Name for the validation, defaults to "validation_result".
+    """
+
+    # Define the tokens
     token_types = {
         "AND": [" and ", " & "],
         "OR": [" or ", " | "],
@@ -17,16 +30,28 @@ class Parser:
         "GROUP_CLOSE": ")",
     }
 
-    def __init__(self, expression, validation_id="validation_result"):
+    def __init__(self, expression, name="validation_result"):
         self._log = logging.getLogger(__name__)
 
         # Replace new lines for multi-line expressions
         expression = expression.replace("\n", " ")
         self._tokenizer = Tokenizer(expression, self.token_types)
-        self._id = validation_id
+        self._name = name
 
     def evaluate(self, df):
-        """Evaluate the provided expression against a pandas DataFrame."""
+        """
+        Evaluate the logical expression against the provided pandas DataFrame.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            Data set to evaluate the expression against.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Single-column DataFrame with validation results.
+        """
 
         result = None
 
@@ -86,5 +111,5 @@ class Parser:
 
                 result = Evaluator(token.value).evaluate(df)
 
-        result.columns = [self._id]
+        result.columns = [self._name]
         return result

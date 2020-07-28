@@ -10,14 +10,14 @@ class Comparator:
         Method for getting a Comparator object based on its symbol.
 
         Parameters
-        ==========
+        ----------
         symbol : str
             String (lower case) identifying a comparator, for example "==".
 
         Returns
-        =======
+        -------
         Comparator
-            Instance of a comparator subclass
+            Instance of the requested Comparator subclass.
         """
 
         symbols = {comp.symbol: comp for comp in cls.__subclasses__()}
@@ -42,14 +42,14 @@ class Operator:
         Method for getting a Operator object based on its symbol.
 
         Parameters
-        ==========
+        ----------
         symbol : str
             String (lower case) identifying a comparator, for example "mean".
 
         Returns
-        =======
+        -------
         Operator
-            Instance of an operator subclass
+            Instance of the requested Operator subclass.
         """
 
         symbols = {
@@ -62,7 +62,14 @@ class Operator:
 
     @classmethod
     def list(cls):
-        """Returns a set of available Comparator symbols."""
+        """
+        Returns a set of available Comparator symbols.
+
+        Returns
+        -------
+        set
+            Set of available Comparator symbols
+        """
 
         return {op.symbol for op in cls.get_subclasses() if hasattr(op, "symbol")}
 

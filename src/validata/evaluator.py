@@ -8,7 +8,15 @@ from validata.comparators import Comparator
 
 
 class Evaluator:
-    """Evaluator class for parsing and evaluating simple boolean expressions."""
+    """
+    Evaluator class for parsing and evaluating simple boolean expressions.
+
+    Parameters
+    ----------
+    expression : str
+        Logical expression to evaluate, should be in the following format:
+        (Operator) <column expression> <Comparator> (target)
+    """
 
     def __init__(self, expression):
         self._log = logging.getLogger(__name__)
@@ -24,14 +32,14 @@ class Evaluator:
         - If no special characters are found, a single column is assumed.
 
         Parameters
-        ==========
+        ----------
         col_expr : str
             Expression for selecting one or more columns.
         columns : pandas.Index
             Columns from the DataFrame being validated.
 
         Returns
-        =======
+        -------
         set
             Set of selected column names
         """
@@ -56,7 +64,20 @@ class Evaluator:
 
     @staticmethod
     def _parse_expression(expression):
-        """Parse expression into its component parts."""
+        """
+        Parse expression into its component parts.
+
+        Parameters
+        ----------
+        expression : str
+            Logical expression to evaluate, should be in the following format:
+            (Operator) <column expression> <Comparator> (target)
+
+        Returns
+        -------
+        Tuple(Union[str, None], str, str, Union[str, None])
+            Tuple of operator symbol, column expression, comparator symbol, value
+        """
 
         # Define regexes for component parts
         op_expr = "|".join([re.escape(op) for op in Operator.list()])
@@ -88,7 +109,19 @@ class Evaluator:
         return op, cols, comp, value
 
     def evaluate(self, df):
-        """Evaluate the expression against the provided data frame."""
+        """
+        Evaluate the expression against the provided data frame.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            Data set to evaluate the expression against.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Single-column DataFrame with validation results.
+        """
 
         # Get components from the expression
         op, cols, comp, value = self._parse_expression(self._expression)
