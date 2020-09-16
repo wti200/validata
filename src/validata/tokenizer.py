@@ -7,9 +7,12 @@ import logging
 class Token:
     """Class for a single token."""
 
-    def __init__(self, token_type, token_value):
-        self.type = token_type
+    def __init__(self, token_value, token_type):
         self.value = token_value
+        self.type = token_type
+
+    def __repr__(self):
+        return f"Token({self.value}, {self.type})"
 
 
 class Tokenizer:
@@ -28,9 +31,6 @@ class Tokenizer:
         ")": "GROUP_CLOSE",
         "&": "AND",
         "|": "OR",
-        "is": "EqualComparator",
-        "is missing": "MissingComparator",
-        "==": "EqualComparator",
     }
 
     # Define quoting styles
@@ -40,18 +40,28 @@ class Tokenizer:
         "`": "REGEX",
     }
 
-    # Define word boundaries
+    # Define word boundary and punctuation characters
     _word_boundary = string.whitespace + "()<>=&|"
+    _punctuation = string.punctuation
 
-    _pointer = 0
+    # Initialize variables
     _tokens = []
-    _tmp = ""
+    _lookup = []
+    _pointer = 0
 
-    def __init__(self):
+    def __init__(self, expression, additional_types=None):
         self._log = logging.getLogger(__name__)
-        self._lookup = sorted(self._token_types, key=len, reverse=True)
 
-    def tokenize(self, expression):
+        # Update tokens
+        if additional_types:
+            self._token_types.update(additional_types)
+
+        # Tokenize the expression
+        self._lookup = sorted(self._token_types, key=len, reverse=True)
+        self._tokens = self._tokenize(expression)
+        self._pointer = 0
+
+    def _tokenize(self, expression):
         """
         Generator for tokenizing a logical string.
 
@@ -66,13 +76,14 @@ class Tokenizer:
             Iterator returning tokens from the logical expression.
         """
 
+        tokens = []
         while expression:
 
             # Check for a token
             token, expression = self._capture_token(expression)
             if token:
                 self._log.debug("Found token: %s [%s]", token.value, token.type)
-                yield token
+                tokens.append(token)
 
             # Quoted string
             elif expression[0] in self._quote_styles:
@@ -82,19 +93,30 @@ class Tokenizer:
                 )
                 expression = expression[1:]
                 self._log.debug("Found quoted string: %s [%s]", quoted_str, quote_style)
-                yield Token(quoted_str, quote_style)
+                tokens.append(Token(quoted_str, quote_style))
 
-            # Anything except whitespace
-            elif expression[0] not in string.whitespace:
+            # Word characters
+            elif expression[0] not in self._word_boundary:
                 word_str, expression = self._capture(
                     expression, exclude=self._word_boundary
                 )
                 self._log.debug("Found word: %s", word_str)
-                yield Token(word_str, "WORD")
+                tokens.append(Token(word_str, "WORD"))
+
+            # Punctuation
+            elif expression[0] in self._punctuation:
+                punctuation_str, expression = self._capture(
+                    expression, include=self._punctuation
+                )
+                self._log.debug("Found punctuation: %s", punctuation_str)
+                tokens.append(Token(punctuation_str, "PUNCTUATION"))
 
             # Skip
             else:
+                self._log.debug("Ignored character: '%s'", expression[0])
                 expression = expression[1:]
+
+        return tokens
 
     def _capture_token(self, expression):
         """
@@ -140,7 +162,7 @@ class Tokenizer:
         while expression:
             if expression[0] == "\\":
                 expression = expression[1:]
-            elif include and expression[0] not in exclude:
+            elif include and expression[0] not in include:
                 break
             elif exclude and expression[0] in exclude:
                 break
@@ -148,3 +170,31 @@ class Tokenizer:
             expression = expression[1:]
 
         return captured, expression
+
+    def peek(self):
+        """Peeks ahead at the next token."""
+
+        if self.has_next():
+            return self._tokens[self._pointer]
+        return None
+
+    def has_next(self):
+        """Checks whether there are more tokens."""
+
+        return self._pointer < len(self._tokens)
+
+    def __iter__(self):
+        """Start iteration, resets the pointer."""
+
+        return self
+
+    def __next__(self):
+        """Returns the next token."""
+
+        if not self.has_next():
+            self._pointer = 0
+            raise StopIteration
+
+        token = self._tokens[self._pointer]
+        self._pointer += 1
+        return token

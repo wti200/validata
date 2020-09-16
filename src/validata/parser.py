@@ -5,6 +5,8 @@ import numpy as np
 
 from validata.tokenizer import Tokenizer
 from validata.evaluator import Evaluator
+from validata.operators import Operator
+from validata.comparators import Comparator
 
 
 class Parser:
@@ -22,20 +24,14 @@ class Parser:
         Name for the validation, defaults to "validation_result".
     """
 
-    # Define the tokens
-    token_types = {
-        "AND": [" and ", " & "],
-        "OR": [" or ", " | "],
-        "GROUP_OPEN": "(",
-        "GROUP_CLOSE": ")",
-    }
-
     def __init__(self, expression, name="validation_result"):
         self._log = logging.getLogger(__name__)
 
-        # Replace new lines for multi-line expressions
-        expression = expression.replace("\n", " ")
-        self._tokenizer = Tokenizer(expression, self.token_types)
+        # TO DO: Check for duplicate names
+        token_types = {op: "OPERATOR" for op in Operator.list()}
+        token_types.update({comp: "COMPARATOR" for comp in Comparator.list()})
+        self._tokenizer = Tokenizer(expression, token_types)
+
         self._name = name
 
     def evaluate(self, df):
@@ -86,9 +82,32 @@ class Parser:
                     right_hand = self.evaluate(df)
 
                 else:
-                    self._log.debug("Processing token: %s", next_token.value)
-                    self._log.debug("Evaluating right hand side expression.")
-                    right_hand = Evaluator(next_token.value).evaluate(df)
+                    self._log.debug("Evaluating right-hand expression.")
+
+                    # Collect all tokens related to the expression
+                    expression = [next_token]
+                    for tkn in self._tokenizer:
+                        expression.append(tkn)
+                        next_token = self._tokenizer.peek()
+                        if next_token and next_token.type in [
+                                "AND",
+                                "OR",
+                                "GROUP_OPEN",
+                                "GROUP_CLOSE",
+                        ]:
+                            break
+
+                    # Classify parts and evaluate the expression
+                    op, cols, comp, val = self._classify_parts(expression)
+                    cols = self._select_columns(df, cols)
+                    self._log.debug(
+                        "Operator: %s, Columns: %s, Comparator: %s, Value: %s",
+                        op,
+                        [col.value for col in cols],
+                        comp,
+                        val,
+                    )
+                    right_hand = Evaluator(cols, comp, val, op).evaluate(df)
 
                 # Apply and / or operation
                 if token.type == "AND":
@@ -104,12 +123,104 @@ class Parser:
                     ).to_frame()
 
             else:
-                self._log.debug("Evaluating expression: %s", token.value)
+                self._log.debug("Evaluating logical expression.")
 
                 if result is not None:
                     raise ValueError("Expected and / or, got expression instead.")
 
-                result = Evaluator(token.value).evaluate(df)
+                # Collect all tokens related to the expression
+                expression = [token]
+                for tkn in self._tokenizer:
+                    expression.append(tkn)
+                    next_token = self._tokenizer.peek()
+                    if next_token and next_token.type in [
+                            "AND",
+                            "OR",
+                            "GROUP_OPEN",
+                            "GROUP_CLOSE",
+                    ]:
+                        break
+
+                # Classify parts and evaluate the expression
+                op, cols, comp, val = self._classify_parts(expression)
+                cols = self._select_columns(df, cols)
+                self._log.debug(
+                    "Operator: %s, Columns: %s, Comparator: %s, Value: %s",
+                    op,
+                    cols,
+                    comp,
+                    val,
+                )
+                result = Evaluator(cols, comp, val, op).evaluate(df)
 
         result.columns = [self._name]
         return result
+
+    @staticmethod
+    def _classify_parts(token_list):
+        """
+        Classify different parts of the provided token list.
+
+        Parameters
+        ----------
+        token_list : List[validata.tokenizer.Token]
+            List of tokens from the Tokenizer class.
+
+        Returns
+        -------
+        Tuple[str, list, str, str]
+            Tuple of operator, columns, comparator, and target value.
+        """
+
+        operator = None
+        comparator = None
+        columns = []
+        value = []
+
+        for token in token_list:
+            if token.type == "OPERATOR":
+                operator = token.value
+            elif token.type == "COMPARATOR":
+                comparator = token.value
+            elif not comparator:
+                if token.value == "+":
+                    continue
+                columns.append(token)
+            else:
+                value.append(token.value)
+
+        return operator, columns, comparator, " ".join(value)
+
+    @staticmethod
+    def _select_columns(df, column_tokens):
+        """
+        Select columns from a DataFrame based on al list of column tokens.
+        """
+
+        selected = []
+        for token in column_tokens:
+
+            # Match by regular expression
+            if token.type == "REGEX":
+                cols = df.columns[df.columns.str.contains(token.value, regex=True)]
+                selected.extend(cols)
+
+            # Match by name
+            else:
+                col_name = token.value
+                if col_name.endswith("*"):
+                    cols = {col for col in df.columns if col.startswith(col_name[:-1])}
+                    if not cols:
+                        raise RuntimeError(
+                            f"No columns were selected using expression: '{col_name}'."
+                        )
+                    selected.extend(cols)
+
+                else:
+                    if col_name not in df.columns:
+                        raise RuntimeError(
+                            f"Column '{col_name}' not found in the data."
+                        )
+                    selected.append(col_name)
+
+        return set(selected)
