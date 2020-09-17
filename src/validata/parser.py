@@ -4,7 +4,8 @@ import logging
 import numpy as np
 
 from validata.tokenizer import Tokenizer
-from validata.evaluator import Evaluator
+from validata.comparators import Comparator
+from validata.operators import Operator, LogicalOperator, DataOperator
 
 
 class Parser:
@@ -22,20 +23,14 @@ class Parser:
         Name for the validation, defaults to "validation_result".
     """
 
-    # Define the tokens
-    token_types = {
-        "AND": [" and ", " & "],
-        "OR": [" or ", " | "],
-        "GROUP_OPEN": "(",
-        "GROUP_CLOSE": ")",
-    }
-
     def __init__(self, expression, name="validation_result"):
         self._log = logging.getLogger(__name__)
 
-        # Replace new lines for multi-line expressions
-        expression = expression.replace("\n", " ")
-        self._tokenizer = Tokenizer(expression, self.token_types)
+        # TO DO: Check for duplicate names
+        token_types = {op: "OPERATOR" for op in Operator.list()}
+        token_types.update({comp: "COMPARATOR" for comp in Comparator.list()})
+        self._tokenizer = Tokenizer(expression, token_types)
+
         self._name = name
 
     def evaluate(self, df):
@@ -79,16 +74,23 @@ class Parser:
                 # Get right hand side, compute results
                 next_token = next(self._tokenizer)
                 if next_token.type == "GROUP_OPEN":
-                    self._log.debug(
-                        "Processing token: %s [%s]", next_token.value, next_token.type
-                    )
-                    self._log.debug("Entering nested right hand side expression.")
+                    self._log.debug("Entering nested right-hand expression.")
                     right_hand = self.evaluate(df)
 
                 else:
-                    self._log.debug("Processing token: %s", next_token.value)
-                    self._log.debug("Evaluating right hand side expression.")
-                    right_hand = Evaluator(next_token.value).evaluate(df)
+                    self._log.debug("Evaluating right-hand partial expression.")
+
+                    # Collect and evaluate the partial expression
+                    self._tokenizer.rewind()
+                    op, cols, comp, val = self._collect_partial()
+                    self._log.debug(
+                        "Operator: %s, Columns: %s, Comparator: %s, Value: %s",
+                        op,
+                        cols,
+                        comp,
+                        val,
+                    )
+                    right_hand = self._evaluate_partial(df, cols, comp, val, op)
 
                 # Apply and / or operation
                 if token.type == "AND":
@@ -104,12 +106,154 @@ class Parser:
                     ).to_frame()
 
             else:
-                self._log.debug("Evaluating expression: %s", token.value)
+                self._log.debug("Evaluating partial expression.")
 
                 if result is not None:
                     raise ValueError("Expected and / or, got expression instead.")
 
-                result = Evaluator(token.value).evaluate(df)
-
+                # Collect and evaluate the partial expression
+                self._tokenizer.rewind()
+                op, cols, comp, val = self._collect_partial()
+                self._log.debug(
+                    "Operator: %s, Columns: %s, Comparator: %s, Value: %s",
+                    op,
+                    cols,
+                    comp,
+                    val,
+                )
+                result = self._evaluate_partial(df, cols, comp, val, op)
         result.columns = [self._name]
+        return result
+
+    def _collect_partial(self):
+        """
+        Collect and classify the tokens of a partial expression.
+
+        Returns
+        -------
+        Tuple[str, list, str, str]
+            Tuple of operator, columns, comparator, and target value.
+        """
+
+        # Collect all tokens of the sub-expression
+        end_sub = "AND", "OR", "GROUP_OPEN", "GROUP_CLOSE"
+        tokens = []
+        for token in self._tokenizer:
+            tokens.append(token)
+            next_token = self._tokenizer.peek()
+            if next_token and next_token.type in end_sub:
+                break
+
+        # Initialize categories
+        operator = None
+        comparator = None
+        columns = []
+        value = []
+
+        # Classify the sub-expression tokens
+        for token in tokens:
+            if token.type == "OPERATOR":
+                operator = token.value
+            elif token.type == "COMPARATOR":
+                comparator = token.value
+            elif not comparator:
+                if token.value == "+":
+                    continue
+                columns.append(token)
+            else:
+                value.append(token.value)
+
+        return operator, columns, comparator, " ".join(value)
+
+    @staticmethod
+    def _select_columns(df, column_tokens):
+        """
+        Select columns from a DataFrame based on al list of column tokens.
+        """
+
+        selected = []
+        for token in column_tokens:
+
+            # Match by regular expression
+            if token.type == "REGEX":
+                cols = df.columns[df.columns.str.contains(token.value, regex=True)]
+                selected.extend(cols)
+
+            # Match by name
+            else:
+                col_name = token.value
+                if col_name.endswith("*"):
+                    cols = {col for col in df.columns if col.startswith(col_name[:-1])}
+                    if not cols:
+                        raise RuntimeError(
+                            f"No columns were selected using expression: '{col_name}'."
+                        )
+                    selected.extend(cols)
+
+                else:
+                    if col_name not in df.columns:
+                        raise RuntimeError(
+                            f"Column '{col_name}' not found in the data."
+                        )
+                    selected.append(col_name)
+
+        return set(selected)
+
+    # pylint: disable=too-many-arguments
+    def _evaluate_partial(self, df, columns, comparator, target, operator=None):
+        """
+        Evaluate the partial expression against the provided data frame.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            Data set to evaluate the partial expression against.
+        columns : list
+            List of column names or regular expressions.
+        comparator : str
+            String identifying a Comparator class.
+        target : str
+            Target value to compare data against.
+        operator : Optional[str]
+            String identifying an Operator calss (if specified).
+
+        Returns
+        -------
+        pandas.DataFrame
+            Single-column DataFrame with validation results.
+        """
+
+        # Process and log partial expression components
+        if operator:
+            operator = Operator.get(operator)
+            self._log.debug("Using operator: %s.", operator.__class__.__name__)
+
+        columns = self._select_columns(df, columns)
+        self._log.debug("Selected columns: %s.", ", ".join(columns))
+
+        comparator = Comparator.get(comparator)
+        self._log.debug("Using comparator: %s.", comparator.__class__.__name__)
+
+        self._log.debug("Using target: %s.", target)
+
+        # Perform comparison and operation
+        if operator:
+            if isinstance(operator, LogicalOperator):
+                result = df[columns].pipe(comparator, target=target).pipe(operator)
+            elif isinstance(operator, DataOperator):
+                result = df[columns].pipe(operator).pipe(comparator, target=target)
+            else:
+                raise TypeError(
+                    f"Unknown operator type: {operator.__class__.__name__}."
+                )
+
+        else:
+            if len(columns) > 1:
+                raise RuntimeError(
+                    f"Too many columns ({len(columns)}) to compare, either select "
+                    "a single column or reduce columns using an operator."
+                )
+
+            result = df[columns].pipe(comparator, target=target)
+
         return result

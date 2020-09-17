@@ -28,8 +28,8 @@ print(ps.evaluate(df))
 # Find (too) extreme values for height
 ps = Parser(
     """
-    (gender == 1 and height between 140:200) or
-    (gender == 2 and height between 160:220)
+    (gender == 1 & height between 140:200) |
+    (gender == 2 & height between 160:220)
     """
 )
 print(ps.evaluate(df))

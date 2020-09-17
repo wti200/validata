@@ -1,120 +1,220 @@
 """Module containing a Tokenizer class for boolean expressions."""
 
-import re
+import string
 import logging
 
 
 class Token:
     """Class for a single token."""
 
-    def __init__(self, token_type, token_value):
-        self.type = token_type
+    def __init__(self, token_value, token_type):
         self.value = token_value
+        self.type = token_type
+
+    def __repr__(self):
+        return f"Token({self.value}, {self.type})"
 
 
 class Tokenizer:
     """
-    Iterator class for tokenizing a string expression.
+    Class for tokenizing a logical string expression.
 
     Parameters
     ----------
     expression : str
         Expression to generate tokens from.
-    tokens : dict
-        Mapping between tokens and their symbols / string representations.
-    bare_words : Optional[str]
-        Specify handling of bare words:
-        - "capture": capture bare words as tokens (default)
-        - "drop": drop bare words and return tokens only
-        - "error": raise an error when encountering a bare word
-    case_sensitive : Optional[bool]
-        Perform case sensitive matching or not (default)
     """
 
-    _pointer = 0
-    _tokens = []
+    # Define token types
+    _token_types = {
+        "(": "GROUP_OPEN",
+        ")": "GROUP_CLOSE",
+        "&": "AND",
+        "|": "OR",
+    }
 
-    def __init__(self, expression, tokens, bare_words="capture", case_sensitive=False):
+    # Define quoting styles
+    _quote_styles = {
+        "'": "QUOTED STRING",
+        '"': "QUOTED STRING",
+        "`": "REGEX",
+    }
+
+    # Define word boundary and punctuation characters
+    _word_boundary = string.whitespace + "()<>=&|"
+    _punctuation = string.punctuation
+
+    # Initialize variables
+    _tokens = []
+    _lookup = []
+    _pointer = 0
+
+    def __init__(self, expression, additional_types=None):
         self._log = logging.getLogger(__name__)
 
-        expression = expression.strip()
-        if not expression or not isinstance(expression, str):
-            raise ValueError("Please provide an expression as string.")
+        # Update tokens
+        if additional_types:
+            self._token_types.update(additional_types)
 
-        if not tokens or not isinstance(tokens, dict):
-            raise ValueError("Please provide a dict of token types.")
-
-        if bare_words not in ["capture", "drop", "error"]:
-            raise ValueError(f"Invalid bare_words option provided: {bare_words}")
-
-        self._bare_words = bare_words
-        self._case_sensitive = case_sensitive
-
-        self._lookup = self._build_lookup(tokens)
+        # Tokenize the expression
+        self._lookup = self._build_lookup()
         self._tokens = self._tokenize(expression)
+        self._pointer = 0
 
-    def _build_lookup(self, token_types):
-        """Build symbol to label lookup dict."""
+    def _build_lookup(self):
+        """Builds token type look-up lsit."""
 
-        lookup = {}
-        for label, symbols in token_types.items():
-            if not isinstance(symbols, (set, list, tuple)):
-                symbols = [symbols]
-
-            for symbol in symbols:
-                if not self._case_sensitive:
-                    symbol = symbol.lower()
-                lookup.update({symbol: label})
-
+        lookup = []
+        for token_type in sorted(self._token_types, key=len, reverse=True):
+            # No bound checking for all punctuation tokens
+            bound_check = bool(set(token_type) - set(string.punctuation))
+            lookup.append((token_type, bound_check))
         return lookup
 
     def _tokenize(self, expression):
-        """Tokenize the expression."""
+        """
+        Generator for tokenizing a logical string.
 
-        types_str = r"|".join([re.escape(symbol) for symbol in self._lookup])
-        types_str = r"({0})".format(types_str)
-        if self._case_sensitive:
-            split_reg = re.compile(types_str)
-        else:
-            split_reg = re.compile(types_str, re.IGNORECASE)
+        Parameters
+        ----------
+        expression : str
+            Expression to generate tokens from.
+
+        Returns
+        -------
+        Iterator
+            Iterator returning tokens from the logical expression.
+        """
 
         tokens = []
-        for symbol in split_reg.split(expression):
-            # Skip empty tokens
-            if not symbol.strip():
-                continue
+        while expression:
 
-            # Bare word encountered
-            lookup = symbol if self._case_sensitive else symbol.lower()
-            if lookup not in self._lookup:
-                if self._bare_words == "capture":
-                    tokens.append(Token("BARE WORD", symbol))
+            # Check for a token
+            token, expression = self._capture_token(expression)
+            if token:
+                self._log.debug("Found token: %s [%s]", token.value, token.type)
+                tokens.append(token)
 
-                elif self._bare_words == "error":
-                    raise ValueError(f"Encountered bare word in expression: {symbol}.")
+            # Quoted string
+            elif expression[0] in self._quote_styles:
+                quote_style = self._quote_styles[expression[0]]
+                quoted_str, expression = self._capture(
+                    expression[1:], exclude=expression[0]
+                )
+                expression = expression[1:]
+                self._log.debug("Found quoted string: %s [%s]", quoted_str, quote_style)
+                tokens.append(Token(quoted_str, quote_style))
 
-            # Token encountered
+            # Word characters
+            elif expression[0] not in self._word_boundary:
+                word_str, expression = self._capture(
+                    expression, exclude=self._word_boundary
+                )
+                self._log.debug("Found word: %s", word_str)
+                tokens.append(Token(word_str, "WORD"))
+
+            # Punctuation
+            elif expression[0] in self._punctuation:
+                punctuation_str, expression = self._capture(
+                    expression, include=self._punctuation
+                )
+                self._log.debug("Found punctuation: %s", punctuation_str)
+                tokens.append(Token(punctuation_str, "PUNCTUATION"))
+
+            # Skip
             else:
-                tokens.append(Token(self._lookup[lookup], symbol))
+                self._log.debug("Ignored character: '%s'", expression[0])
+                expression = expression[1:]
 
         return tokens
+
+    @staticmethod
+    def _bounded_startswith(token, expression, check):
+        """Checks for word boundary after token."""
+
+        if not expression.startswith(token):
+            return False
+        if check:
+            return (
+                token == expression
+                or expression[len(token)] in string.whitespace + string.punctuation
+            )
+        return True
+
+    def _capture_token(self, expression):
+        """
+        Searches for and captures tokens from a logical expression.
+
+        Parameters
+        ----------
+        expression : str
+            Expression to capture the substring from.
+
+        Returns
+        -------
+        Tuple[str, str]
+            Tuple of captured string and remainder of the logical expression.
+        """
+
+        for token, check in self._lookup:
+            if self._bounded_startswith(token, expression, check):
+                return Token(token, self._token_types[token]), expression[len(token) :]
+        return None, expression
+
+    @staticmethod
+    def _capture(expression, exclude=None, include=None):
+        """
+        Captures a substring from a logical expression.
+
+        Parameters
+        ----------
+        expression : str
+            Expression to capture the substring from.
+        exclude : Union[list, str]
+            List or string of characters that end the substring pattern.
+        include : Union[list, str]
+            List or string of characters that should be included in the substring.
+
+        Returns
+        -------
+        Tuple[str, str]
+            Tuple of captured string and remainder of the logical expression.
+        """
+
+        captured = ""
+        while expression:
+            if expression[0] == "\\":
+                expression = expression[1:]
+            elif include and expression[0] not in include:
+                break
+            elif exclude and expression[0] in exclude:
+                break
+            captured += expression[0]
+            expression = expression[1:]
+
+        return captured, expression
 
     def peek(self):
         """Peeks ahead at the next token."""
 
         if self.has_next():
-            return self._tokens[self._pointer + 1]
+            return self._tokens[self._pointer]
         return None
 
+    # pylint: disable=invalid-name
+    def rewind(self, by=1):
+        """Rewinds pointer to the previous token."""
+
+        if self._pointer < by:
+            raise ValueError(
+                f"Cannot rewind tokenizer by {by} tokens; not enough tokens."
+            )
+        self._pointer -= by
+
     def has_next(self):
-        """Checks whether there is a next token."""
+        """Checks whether there are more tokens."""
 
         return self._pointer < len(self._tokens)
-
-    def reset(self):
-        """Resets the pointer to the starting token."""
-
-        self._pointer = 0
 
     def __iter__(self):
         """Start iteration, resets the pointer."""
@@ -125,6 +225,7 @@ class Tokenizer:
         """Returns the next token."""
 
         if not self.has_next():
+            # self._pointer = 0
             raise StopIteration
 
         token = self._tokens[self._pointer]
