@@ -178,6 +178,16 @@ class Tokenizer:
             return self._tokens[self._pointer]
         return None
 
+    # pylint: disable=invalid-name
+    def rewind(self, by=1):
+        """Rewinds pointer to the previous token."""
+
+        if self._pointer < by:
+            raise ValueError(
+                f"Cannot rewind tokenizer by {by} tokens; not enough tokens."
+            )
+        self._pointer -= by
+
     def has_next(self):
         """Checks whether there are more tokens."""
 
@@ -192,7 +202,7 @@ class Tokenizer:
         """Returns the next token."""
 
         if not self.has_next():
-            self._pointer = 0
+            # self._pointer = 0
             raise StopIteration
 
         token = self._tokens[self._pointer]

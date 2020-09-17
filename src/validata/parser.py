@@ -4,9 +4,8 @@ import logging
 import numpy as np
 
 from validata.tokenizer import Tokenizer
-from validata.evaluator import Evaluator
-from validata.operators import Operator
 from validata.comparators import Comparator
+from validata.operators import Operator, LogicalOperator, DataOperator
 
 
 class Parser:
@@ -75,39 +74,23 @@ class Parser:
                 # Get right hand side, compute results
                 next_token = next(self._tokenizer)
                 if next_token.type == "GROUP_OPEN":
-                    self._log.debug(
-                        "Processing token: %s [%s]", next_token.value, next_token.type
-                    )
-                    self._log.debug("Entering nested right hand side expression.")
+                    self._log.debug("Entering nested right-hand expression.")
                     right_hand = self.evaluate(df)
 
                 else:
-                    self._log.debug("Evaluating right-hand expression.")
+                    self._log.debug("Evaluating right-hand partial expression.")
 
-                    # Collect all tokens related to the expression
-                    expression = [next_token]
-                    for tkn in self._tokenizer:
-                        expression.append(tkn)
-                        next_token = self._tokenizer.peek()
-                        if next_token and next_token.type in [
-                                "AND",
-                                "OR",
-                                "GROUP_OPEN",
-                                "GROUP_CLOSE",
-                        ]:
-                            break
-
-                    # Classify parts and evaluate the expression
-                    op, cols, comp, val = self._classify_parts(expression)
-                    cols = self._select_columns(df, cols)
+                    # Collect and evaluate the partial expression
+                    self._tokenizer.rewind()
+                    op, cols, comp, val = self._collect_partial()
                     self._log.debug(
                         "Operator: %s, Columns: %s, Comparator: %s, Value: %s",
                         op,
-                        [col.value for col in cols],
+                        cols,
                         comp,
                         val,
                     )
-                    right_hand = Evaluator(cols, comp, val, op).evaluate(df)
+                    right_hand = self._evaluate_partial(df, cols, comp, val, op)
 
                 # Apply and / or operation
                 if token.type == "AND":
@@ -123,27 +106,14 @@ class Parser:
                     ).to_frame()
 
             else:
-                self._log.debug("Evaluating logical expression.")
+                self._log.debug("Evaluating partial expression.")
 
                 if result is not None:
                     raise ValueError("Expected and / or, got expression instead.")
 
-                # Collect all tokens related to the expression
-                expression = [token]
-                for tkn in self._tokenizer:
-                    expression.append(tkn)
-                    next_token = self._tokenizer.peek()
-                    if next_token and next_token.type in [
-                            "AND",
-                            "OR",
-                            "GROUP_OPEN",
-                            "GROUP_CLOSE",
-                    ]:
-                        break
-
-                # Classify parts and evaluate the expression
-                op, cols, comp, val = self._classify_parts(expression)
-                cols = self._select_columns(df, cols)
+                # Collect and evaluate the partial expression
+                self._tokenizer.rewind()
+                op, cols, comp, val = self._collect_partial()
                 self._log.debug(
                     "Operator: %s, Columns: %s, Comparator: %s, Value: %s",
                     op,
@@ -151,20 +121,13 @@ class Parser:
                     comp,
                     val,
                 )
-                result = Evaluator(cols, comp, val, op).evaluate(df)
-
+                result = self._evaluate_partial(df, cols, comp, val, op)
         result.columns = [self._name]
         return result
 
-    @staticmethod
-    def _classify_parts(token_list):
+    def _collect_partial(self):
         """
-        Classify different parts of the provided token list.
-
-        Parameters
-        ----------
-        token_list : List[validata.tokenizer.Token]
-            List of tokens from the Tokenizer class.
+        Collect and classify the tokens of a partial expression.
 
         Returns
         -------
@@ -172,12 +135,23 @@ class Parser:
             Tuple of operator, columns, comparator, and target value.
         """
 
+        # Collect all tokens of the sub-expression
+        end_sub = "AND", "OR", "GROUP_OPEN", "GROUP_CLOSE"
+        tokens = []
+        for token in self._tokenizer:
+            tokens.append(token)
+            next_token = self._tokenizer.peek()
+            if next_token and next_token.type in end_sub:
+                break
+
+        # Initialize categories
         operator = None
         comparator = None
         columns = []
         value = []
 
-        for token in token_list:
+        # Classify the sub-expression tokens
+        for token in tokens:
             if token.type == "OPERATOR":
                 operator = token.value
             elif token.type == "COMPARATOR":
@@ -224,3 +198,62 @@ class Parser:
                     selected.append(col_name)
 
         return set(selected)
+
+    # pylint: disable=too-many-arguments
+    def _evaluate_partial(self, df, columns, comparator, target, operator=None):
+        """
+        Evaluate the partial expression against the provided data frame.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            Data set to evaluate the partial expression against.
+        columns : list
+            List of column names or regular expressions.
+        comparator : str
+            String identifying a Comparator class.
+        target : str
+            Target value to compare data against.
+        operator : Optional[str]
+            String identifying an Operator calss (if specified).
+
+        Returns
+        -------
+        pandas.DataFrame
+            Single-column DataFrame with validation results.
+        """
+
+        # Process and log partial expression components
+        if operator:
+            operator = Operator.get(operator)
+            self._log.debug("Using operator: %s.", operator.__class__.__name__)
+
+        columns = self._select_columns(df, columns)
+        self._log.debug("Selected columns: %s.", ", ".join(columns))
+
+        comparator = Comparator.get(comparator)
+        self._log.debug("Using comparator: %s.", comparator.__class__.__name__)
+
+        self._log.debug("Using target: %s.", target)
+
+        # Perform comparison and operation
+        if operator:
+            if isinstance(operator, LogicalOperator):
+                result = df[columns].pipe(comparator, target=target).pipe(operator)
+            elif isinstance(operator, DataOperator):
+                result = df[columns].pipe(operator).pipe(comparator, target=target)
+            else:
+                raise TypeError(
+                    f"Unknown operator type: {operator.__class__.__name__}."
+                )
+
+        else:
+            if len(columns) > 1:
+                raise RuntimeError(
+                    f"Too many columns ({len(columns)}) to compare, either select "
+                    "a single column or reduce columns using an operator."
+                )
+
+            result = df[columns].pipe(comparator, target=target)
+
+        return result
