@@ -57,9 +57,19 @@ class Tokenizer:
             self._token_types.update(additional_types)
 
         # Tokenize the expression
-        self._lookup = sorted(self._token_types, key=len, reverse=True)
+        self._lookup = self._build_lookup()
         self._tokens = self._tokenize(expression)
         self._pointer = 0
+
+    def _build_lookup(self):
+        """Builds token type look-up lsit."""
+
+        lookup = []
+        for token_type in sorted(self._token_types, key=len, reverse=True):
+            # No bound checking for all punctuation tokens
+            bound_check = bool(set(token_type) - set(string.punctuation))
+            lookup.append((token_type, bound_check))
+        return lookup
 
     def _tokenize(self, expression):
         """
@@ -118,6 +128,19 @@ class Tokenizer:
 
         return tokens
 
+    @staticmethod
+    def _bounded_startswith(token, expression, check):
+        """Checks for word boundary after token."""
+
+        if not expression.startswith(token):
+            return False
+        if check:
+            return (
+                token == expression
+                or expression[len(token)] in string.whitespace + string.punctuation
+            )
+        return True
+
     def _capture_token(self, expression):
         """
         Searches for and captures tokens from a logical expression.
@@ -133,8 +156,8 @@ class Tokenizer:
             Tuple of captured string and remainder of the logical expression.
         """
 
-        for token in self._lookup:
-            if expression.startswith(token):
+        for token, check in self._lookup:
+            if self._bounded_startswith(token, expression, check):
                 return Token(token, self._token_types[token]), expression[len(token) :]
         return None, expression
 
