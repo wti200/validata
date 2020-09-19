@@ -1,44 +1,80 @@
 """Module for unit testing Operator classes."""
 
-import pytest
 import pandas as pd
 
-from validata.operators import Operator
-
-OPERATORS = Operator.list()
+from base_classes import BaseOperatorTests
 
 
-class TestOperators:
-    """Class providing unit tests for Operator classes."""
+# Dummy data for unit tests
+DUMMY_DATA = pd.DataFrame(
+    {
+        "int": [1, 2, 3, 4],
+        "int_miss": [4, None, 2, None],
+        "bool": [True, True, False, False],
+        "bool_miss": [True, False, None, None],
+    }
+)
 
-    @staticmethod
-    def _apply_operator(operator, df):
-        """Applies an Operator to a DataFrame."""
 
-        operator = Operator.get(operator)
-        return operator(df)
+class TestMeanOperator(BaseOperatorTests):
+    """Tests for the MeanOperator class."""
 
-    @pytest.mark.parametrize("operator", OPERATORS)
-    def test_returns_frame(self, operator, dummy_data):
-        """Test whether operator returns a pandas DataFrame."""
+    operator = "mean"
+    data = DUMMY_DATA[["int", "int_miss"]]
+    expected = pd.DataFrame({0: [2.5, 2.0, 2.5, 4.0]})
 
-        result = self._apply_operator(operator, dummy_data)
-        assert isinstance(result, pd.DataFrame)
 
-    @pytest.mark.parametrize("operator", OPERATORS)
-    def test_returns_frame_on_single_column(self, operator, dummy_data):
-        """
-        Test whether operator returns a pandas DataFrame even if only a
-        single column is provided as input.
-        """
+class TestMedianOperator(BaseOperatorTests):
+    """Tests for the MedianOperator class."""
 
-        result = self._apply_operator(operator, dummy_data)
-        assert isinstance(result, pd.DataFrame)
+    operator = "median"
+    data = DUMMY_DATA[["int", "int_miss"]]
+    expected = pd.DataFrame({0: [2.5, 2.0, 2.5, 4.0]})
 
-    @pytest.mark.parametrize("operator", OPERATORS)
-    def test_shape(self, operator, dummy_data):
-        """Test whether operator returns DataFrame with shape nrow, 1."""
 
-        nrow = dummy_data.shape[0]
-        result = self._apply_operator(operator, dummy_data)
-        assert result.shape == (nrow, 1)
+class TestMinOperator(BaseOperatorTests):
+    """Tests for the MinOperator class."""
+
+    operator = "min"
+    data = DUMMY_DATA[["int", "int_miss"]]
+    expected = pd.DataFrame({0: [1.0, 2.0, 2.0, 4.0]})
+
+
+class TestMaxOperator(BaseOperatorTests):
+    """Tests for the MaxOperator class."""
+
+    operator = "max"
+    data = DUMMY_DATA[["int", "int_miss"]]
+    expected = pd.DataFrame({0: [4.0, 2.0, 3.0, 4.0]})
+
+
+class TestSumOperator(BaseOperatorTests):
+    """Tests for the SumOperator class."""
+
+    operator = "sum"
+    data = DUMMY_DATA[["int", "int_miss"]]
+    expected = pd.DataFrame({0: [5.0, 2.0, 5.0, 4.0]})
+
+
+class TestAnyOperator(BaseOperatorTests):
+    """Tests for the AnyOperator class."""
+
+    operator = "any"
+    data = DUMMY_DATA[["bool", "bool_miss"]]
+    expected = pd.DataFrame({0: [True, True, False, False]})
+
+
+class TestAllOperator(BaseOperatorTests):
+    """Tests for the AllOperator class."""
+
+    operator = "all"
+    data = DUMMY_DATA[["bool", "bool_miss"]]
+    expected = pd.DataFrame({0: [True, False, False, False]})
+
+
+class TestNoneOperator(BaseOperatorTests):
+    """Tests for the NoneOperator class."""
+
+    operator = "none"
+    data = DUMMY_DATA[["bool", "bool_miss"]]
+    expected = pd.DataFrame({0: [False, False, True, True]})

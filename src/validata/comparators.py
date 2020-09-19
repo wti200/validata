@@ -130,7 +130,7 @@ class NotNullComparator(Comparator):
 
 
 class RankComparator(Comparator):
-    """Ranks the records and indicates whether a record falls above or below a certain rank."""
+    """Ranks records and indicates whether they fall above or below a threshold."""
 
     symbol = "ranks in"
 
@@ -149,12 +149,27 @@ class RankComparator(Comparator):
         if pct:
             if not 0 < rank < 100:
                 raise ValueError(
-                    "RankComparator: Percentile rank must be between 0 - 100, got {rank} instead."
+                    f"RankComparator: Percentile rank must be between 0 - 100, got {rank} instead."
                 )
             rank = rank / 100
 
         ranks = df.rank(ascending=ascending, pct=pct)
         return ranks <= rank
+
+
+class ContainsComparator(Comparator):
+    """
+    Checks whether data matches a regular expression pattern.
+
+    Note: Uses `re.search()` to do the matching, use `^...$` if you need
+    to match the entire value.
+    """
+
+    symbol = "contains"
+
+    def __call__(self, df, target):
+        pattern = re.compile(target)
+        return df.applymap(lambda x: x is not None and bool(pattern.search(x)))
 
 
 class OutlierComparator(Comparator):
@@ -232,9 +247,15 @@ class OutlierComparator(Comparator):
         elif match.group("side") == "-":
             whisker_high = None
 
+        # Select method
+
+        if match.group("method").lower() == "sd":
+            method = self._outlier_sd
+        elif match.group("method").lower() == "mad":
+            method = self._outlier_mad
+        else:
+            method = self._outlier_iqr
+
         return df.apply(
-            self._outlier_iqr,
-            axis=0,
-            whisker_low=whisker_low,
-            whisker_high=whisker_high,
+            method, whisker_low=whisker_low, whisker_high=whisker_high, axis=0
         )
