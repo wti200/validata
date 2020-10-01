@@ -16,34 +16,15 @@ import re
 from validata.base_classes import Comparator
 
 
-def _cast(target, value):
-    """
-    Try cast target to the same data type as value.
-
-    TODO:
-    - Bit sloppy, needs improvement (datetimes, error handling, etc)
-    - Move to Comparator base class?
-    """
-
-    if isinstance(value, int):
-        return int(target)
-
-    if isinstance(value, float):
-        return float(target)
-
-    if isinstance(value, bool):
-        return bool(target)
-
-    return target
-
-
 class EqComparator(Comparator):
     """Checks for identical values."""
 
     symbol = "=="
 
     def __call__(self, df, target):
-        return df.applymap(lambda x: x == _cast(target, x))
+        for col in df.columns:
+            df = df.assign(**{col: df[col] == self._cast(target, df[col].dtype)})
+        return df
 
 
 class UnEqComparator(Comparator):
@@ -52,7 +33,9 @@ class UnEqComparator(Comparator):
     symbol = "!="
 
     def __call__(self, df, target):
-        return df.applymap(lambda x: x != _cast(target, x))
+        for col in df.columns:
+            df = df.assign(**{col: df[col] != self._cast(target, df[col].dtype)})
+        return df
 
 
 class GtComparator(Comparator):
@@ -61,7 +44,8 @@ class GtComparator(Comparator):
     symbol = ">"
 
     def __call__(self, df, target):
-        return df.applymap(lambda x: x > float(target))
+        self._check_dtypes(df, "number")
+        return df > self._cast(target, "float")
 
 
 class GtEqComparator(Comparator):
@@ -70,7 +54,8 @@ class GtEqComparator(Comparator):
     symbol = ">="
 
     def __call__(self, df, target):
-        return df.applymap(lambda x: x >= float(target))
+        self._check_dtypes(df, "number")
+        return df >= self._cast(target, "float")
 
 
 class LtComparator(Comparator):
@@ -79,7 +64,8 @@ class LtComparator(Comparator):
     symbol = "<"
 
     def __call__(self, df, target):
-        return df.applymap(lambda x: x < float(target))
+        self._check_dtypes(df, "number")
+        return df < self._cast(target, "float")
 
 
 class LtEqComparator(Comparator):
@@ -88,7 +74,8 @@ class LtEqComparator(Comparator):
     symbol = "<="
 
     def __call__(self, df, target):
-        return df.applymap(lambda x: x <= float(target))
+        self._check_dtypes(df, "number")
+        return df <= self._cast(target, "float")
 
 
 class InComparator(Comparator):
@@ -140,7 +127,8 @@ class RankComparator(Comparator):
         )
         if not match:
             raise ValueError(
-                f"RankComparator: Invalid target '{target}', use <top|bottom> <rank> (%)."
+                f"RankComparator: Invalid target '{target}', "
+                "use <top|bottom> <rank> (%)."
             )
 
         ascending = match.group("from") == "bottom"
@@ -149,7 +137,8 @@ class RankComparator(Comparator):
         if pct:
             if not 0 < rank < 100:
                 raise ValueError(
-                    f"RankComparator: Percentile rank must be between 0 - 100, got {rank} instead."
+                    "RankComparator: Percentile rank must be between 0 - 100, "
+                    f"got {rank} instead."
                 )
             rank = rank / 100
 
@@ -237,7 +226,8 @@ class OutlierComparator(Comparator):
         )
         if not match:
             raise ValueError(
-                f"OutlierComparator: Invalid target '{target}', use (+|-)<whisker> <IQR|SD|MAD>."
+                f"OutlierComparator: Invalid target '{target}', "
+                "use (+|-)<whisker> <IQR|SD|MAD>."
             )
 
         # Set whiskers
