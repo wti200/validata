@@ -234,7 +234,17 @@ class Parser:
         comparator = Comparator.get(comparator)
         self._log.debug("Using comparator: %s.", comparator.__class__.__name__)
 
-        self._log.debug("Using target: %s.", target)
+        # Target is either constant or column reference
+        if target.startswith("{") and target.endswith("}"):
+            target = target[1:-1]
+            self._log.debug("Using target column: %s.", target)
+
+            if target not in df.columns:
+                raise RuntimeError(f"Target column '{target}' does not exist.")
+            target = df[target]
+
+        else:
+            self._log.debug("Using target: %s.", target)
 
         # Perform comparison and operation
         if operator:

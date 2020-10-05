@@ -12,6 +12,7 @@ Comparator classes should always extend the `Comparators` base class and
 be initialized via the `Comparators.get()` method.
 """
 import re
+import pandas as pd
 
 from validata.base_classes import Comparator
 
@@ -22,9 +23,15 @@ class EqComparator(Comparator):
     symbol = "=="
 
     def __call__(self, df, target):
+        res = pd.DataFrame()
+
+        if not isinstance(target, pd.Series):
+            target = pd.Series(target, index=df.index)
+
         for col in df.columns:
-            df = df.assign(**{col: df[col] == self._cast(target, df[col].dtype)})
-        return df
+            res[col] = df[col] == target.astype(df[col].dtype)
+
+        return res
 
 
 class UnEqComparator(Comparator):
@@ -33,9 +40,8 @@ class UnEqComparator(Comparator):
     symbol = "!="
 
     def __call__(self, df, target):
-        for col in df.columns:
-            df = df.assign(**{col: df[col] != self._cast(target, df[col].dtype)})
-        return df
+        eq_comp = EqComparator()
+        return ~eq_comp(df, target)
 
 
 class GtComparator(Comparator):
@@ -45,7 +51,11 @@ class GtComparator(Comparator):
 
     def __call__(self, df, target):
         self._check_dtypes(df, "number")
-        return df > self._cast(target, "float")
+
+        if not isinstance(target, pd.Series):
+            target = pd.Series(target, index=df.index)
+
+        return df.gt(target.astype(float), axis=0)
 
 
 class GtEqComparator(Comparator):
@@ -55,7 +65,11 @@ class GtEqComparator(Comparator):
 
     def __call__(self, df, target):
         self._check_dtypes(df, "number")
-        return df >= self._cast(target, "float")
+
+        if not isinstance(target, pd.Series):
+            target = pd.Series(target, index=df.index)
+
+        return df.ge(target.astype(float), axis=0)
 
 
 class LtComparator(Comparator):
@@ -65,7 +79,11 @@ class LtComparator(Comparator):
 
     def __call__(self, df, target):
         self._check_dtypes(df, "number")
-        return df < self._cast(target, "float")
+
+        if not isinstance(target, pd.Series):
+            target = pd.Series(target, index=df.index)
+
+        return df.lt(target.astype(float), axis=0)
 
 
 class LtEqComparator(Comparator):
@@ -75,7 +93,11 @@ class LtEqComparator(Comparator):
 
     def __call__(self, df, target):
         self._check_dtypes(df, "number")
-        return df <= self._cast(target, "float")
+
+        if not isinstance(target, pd.Series):
+            target = pd.Series(target, index=df.index)
+
+        return df.le(target.astype(float), axis=0)
 
 
 class InComparator(Comparator):
@@ -84,8 +106,15 @@ class InComparator(Comparator):
     symbol = "in"
 
     def __call__(self, df, target):
-        target = [t.strip() for t in target.split(",")]
-        return df.applymap(lambda x: str(x) in target)
+        try:
+            target = [t.strip() for t in target.split(",")]
+        except AttributeError:
+            raise RuntimeError(
+                f"InComparator: Cannot construct list from target '{target}'."
+            )
+
+        # Comparing as string
+        return df.astype(str).isin(target)
 
 
 class BetweenComparator(Comparator):
@@ -94,7 +123,19 @@ class BetweenComparator(Comparator):
     symbol = "between"
 
     def __call__(self, df, target):
-        low, high = (float(t) for t in target.split(":"))
+        self._check_dtypes(df, "number")
+
+        try:
+            low, high = (float(t) for t in target.split(":"))
+        except AttributeError:
+            raise RuntimeError(
+                f"BetweenComparator: Cannot split bound from target '{target}'."
+            )
+        except ValueError:
+            raise RuntimeError(
+                f"BetweenComparator: Non-numeric bounds in target '{target}'."
+            )
+
         return df.applymap(lambda x: low <= float(x) <= high)
 
 
@@ -122,6 +163,8 @@ class RankComparator(Comparator):
     symbol = "ranks in"
 
     def __call__(self, df, target):
+        self._check_dtypes(df, "number")
+
         match = re.match(
             r"(?P<from>top|bottom)\s+(?P<rank>[0-9]+)\s*(?P<pct>%)?", target
         )
@@ -149,16 +192,15 @@ class RankComparator(Comparator):
 class ContainsComparator(Comparator):
     """
     Checks whether data matches a regular expression pattern.
-
-    Note: Uses `re.search()` to do the matching, use `^...$` if you need
-    to match the entire value.
     """
 
     symbol = "contains"
 
     def __call__(self, df, target):
-        pattern = re.compile(target)
-        return df.applymap(lambda x: x is not None and bool(pattern.search(x)))
+        self._check_dtypes(df, "object")
+
+        # Apply target as regex, mark missing values (ex. wrong data type) as False.
+        return df.apply(lambda col: col.str.contains(target, regex=True, na=False))
 
 
 class OutlierComparator(Comparator):

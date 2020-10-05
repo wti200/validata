@@ -1,7 +1,5 @@
 """Factory / base classes for Comparator and Operator classes."""
 
-import numpy as np
-
 
 class Comparator:
     """Abstract factory class for initializing Comparator objects."""
@@ -43,33 +41,6 @@ class Comparator:
             raise TypeError(
                 f"Columns did not match dtype '{dtype}': {', '.join(invalid)}."
             )
-
-    @staticmethod
-    def _cast(target, dtype):
-        """
-        Try cast target to the same data type as value.
-
-        TODO:
-        - Bit sloppy, needs improvement (object handling, error handling, etc)
-        """
-
-        if dtype in ["int", "int64"]:
-            return int(target)
-
-        if dtype in ["float", "float64"]:
-            return float(target)
-
-        if dtype == "bool":
-            return bool(target)
-
-        # Note: assuming string type for objects
-        if dtype == "object":
-            return str(target)
-
-        if dtype == "datetime64[ns]":
-            return np.datetime64(target)
-
-        return target
 
 
 class Operator:
