@@ -8,7 +8,6 @@ with open("HISTORY.md") as history_file:
     HISTORY = history_file.read()
 
 REQUIREMENTS = ["numpy", "pandas"]
-SETUP_REQUIREMENTS = ["pytest-runner"]
 TEST_REQUIREMENTS = ["pytest"]
 EXTRAS_REQUIRE = {
     "dev": [
@@ -38,7 +37,6 @@ setuptools.setup(
     version="0.1.0",
     packages=setuptools.find_packages("src"),
     package_dir={"": "src"},
-    setup_requires=SETUP_REQUIREMENTS,
     test_suite="tests",
     tests_require=TEST_REQUIREMENTS,
     url="https://github.com/LFKoning/validata",
