@@ -53,7 +53,7 @@ data = pd.read_csv("data_file.csv")
 
 # Perform all validations on the data
 vd = Validator(validations)
-result = vd.evaluate(data)
+result = vd.validate(data)
 
 # Prints a DataFrame with a column for each validation
 print(result)
@@ -77,6 +77,7 @@ If you want to help develop `validata`, use the `dev` option instead and also in
 python -m pip install -e .[dev]
 pre-commit install
 ```
+
 The `-e` (`--editable`) flag allows you to make code changes to the `validata` package on the fly. Using `pre-commit` is optional, but helps you write clean code (using `black` and `pylint`) before commiting it to the `git` repo.
 
 Linux users can also use the makefile for convenience, to install the package use:
